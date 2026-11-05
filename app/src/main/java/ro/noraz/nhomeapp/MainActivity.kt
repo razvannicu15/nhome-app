@@ -16,6 +16,9 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -78,6 +81,7 @@ class MainActivity : Activity() {
                 }
                 override fun onPageFinished(view: WebView, url: String) {
                     syncSession()
+                    applyDeviceProfile()
                     status.visibility = View.GONE
                 }
             }
@@ -100,6 +104,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (wall) setWall(true)
         if (pausedAt != 0L && SystemClock.elapsedRealtime() - pausedAt > 60_000) choose(force = false)
         pausedAt = 0L
     }
@@ -181,6 +186,49 @@ class MainActivity : Activity() {
     private fun sessionOf(cookies: String?): String? =
         cookies?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith("nhome_device_session=") }
             ?.substringAfter('=')?.takeIf { it.isNotEmpty() }
+
+
+    private var wall = false
+
+    /** The server marks a device as wall tablet (Setări → Acces). Then: full screen, screen always on. */
+    private fun applyDeviceProfile() {
+        web.evaluateJavascript("(function(){try{return localStorage.getItem('nhome_wall_device')}catch(e){return null}})()") { v ->
+            setWall(v?.trim('"') == "1")
+        }
+    }
+
+    private fun setWall(on: Boolean) {
+        wall = on
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(!on)
+            window.insetsController?.let { c ->
+                if (on) {
+                    c.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    c.hide(WindowInsets.Type.systemBars())
+                } else {
+                    c.show(WindowInsets.Type.systemBars())
+                }
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (on) (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) else View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && wall) setWall(true)
+    }
 
     private fun prefs() = getSharedPreferences("nhome", Context.MODE_PRIVATE)
     private fun remember(url: String) = prefs().edit().putString("lan", url).apply()

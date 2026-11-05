@@ -1,0 +1,41 @@
+name: Build Nhome APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK packages
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Name APK
+        run: |
+          version="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)"
+          cp app/build/outputs/apk/release/app-release.apk "Nhome-${version}.apk"
+          echo "APK=Nhome-${version}.apk" >> "$GITHUB_ENV"
+          echo "VER=${version}" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VER }}-${{ github.run_number }}
+          name: Nhome ${{ env.VER }} (build ${{ github.run_number }})
+          make_latest: true
+          files: ${{ env.APK }}
+      - run: echo "[Descarcă APK](https://github.com/${GITHUB_REPOSITORY}/releases/latest)" >> "$GITHUB_STEP_SUMMARY"

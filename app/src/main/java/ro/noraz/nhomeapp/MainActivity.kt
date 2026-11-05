@@ -72,7 +72,11 @@ class MainActivity : Activity() {
             settings.loadWithOverviewMode = true
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             settings.cacheMode = WebSettings.LOAD_DEFAULT
-            webChromeClient = WebChromeClient()
+            webChromeClient = object : WebChromeClient() {
+                // No grey "play" placeholder on <video> elements before the first frame.
+                override fun getDefaultVideoPoster(): android.graphics.Bitmap =
+                    android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val url = request.url

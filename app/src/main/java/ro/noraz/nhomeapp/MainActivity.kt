@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -74,6 +75,7 @@ class MainActivity : Activity() {
                     return try { startActivity(Intent(Intent.ACTION_VIEW, url)); true } catch (e: Exception) { false }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
+                    CookieManager.getInstance().flush()
                     status.visibility = View.GONE
                 }
             }
@@ -84,6 +86,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             text = "Nhome · caut serverul de acasă…"
         }
+        // Pairing is a persistent cookie; keep it and write it to disk promptly (see flush()).
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
         root.addView(web, FrameLayout.LayoutParams(-1, -1))
         root.addView(status, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -99,10 +104,12 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        CookieManager.getInstance().flush()
         pausedAt = SystemClock.elapsedRealtime()
     }
 
     override fun onDestroy() {
+        CookieManager.getInstance().flush()
         callback?.let { (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(it) }
         super.onDestroy()
     }

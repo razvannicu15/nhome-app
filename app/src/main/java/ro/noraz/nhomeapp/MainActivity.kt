@@ -75,7 +75,7 @@ class MainActivity : Activity() {
                     return try { startActivity(Intent(Intent.ACTION_VIEW, url)); true } catch (e: Exception) { false }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
-                    CookieManager.getInstance().flush()
+                    syncSession()
                     status.visibility = View.GONE
                 }
             }
@@ -104,12 +104,12 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        CookieManager.getInstance().flush()
+        syncSession()
         pausedAt = SystemClock.elapsedRealtime()
     }
 
     override fun onDestroy() {
-        CookieManager.getInstance().flush()
+        syncSession()
         callback?.let { (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(it) }
         super.onDestroy()
     }
@@ -131,6 +131,7 @@ class MainActivity : Activity() {
                 if (force || target != currentBase) {
                     currentBase = target
                     if (lan != null) remember(lan)
+                    syncSession()
                     web.loadUrl(target)
                 }
             }
@@ -153,6 +154,31 @@ class MainActivity : Activity() {
         cm.registerDefaultNetworkCallback(cb)
         callback = cb
     }
+
+
+    /**
+     * One pairing for both addresses: the server accepts the same device session token on the
+     * LAN address and on nhome.nicu.xyz, so copy the cookie to whichever address lacks it.
+     */
+    private fun syncSession() {
+        val cm = CookieManager.getInstance()
+        val lan = prefs().getString("lan", null)
+        val bases = listOfNotNull(REMOTE, lan)
+        val token = bases.firstNotNullOfOrNull { b -> sessionOf(cm.getCookie(b)) }
+        if (token != null) {
+            for (b in bases) {
+                if (sessionOf(cm.getCookie(b)) != token) {
+                    val secure = if (b.startsWith("https")) "; Secure" else ""
+                    cm.setCookie(b, "nhome_device_session=$token; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax$secure")
+                }
+            }
+        }
+        cm.flush()
+    }
+
+    private fun sessionOf(cookies: String?): String? =
+        cookies?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith("nhome_device_session=") }
+            ?.substringAfter('=')?.takeIf { it.isNotEmpty() }
 
     private fun prefs() = getSharedPreferences("nhome", Context.MODE_PRIVATE)
     private fun remember(url: String) = prefs().edit().putString("lan", url).apply()

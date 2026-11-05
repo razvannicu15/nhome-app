@@ -67,6 +67,9 @@ class MainActivity : Activity() {
             settings.mediaPlaybackRequiresUserGesture = false
             // Ignore the phone's font-size setting so the layout matches the PWA in Chrome.
             settings.textZoom = 100
+            // Honour the page's viewport meta like Chrome (the wall tablet layout is width=1600, scaled to fit).
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             webChromeClient = WebChromeClient()

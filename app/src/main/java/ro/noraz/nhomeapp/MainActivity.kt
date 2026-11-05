@@ -62,6 +62,8 @@ class MainActivity : Activity() {
             settings.domStorageEnabled = true
             settings.databaseEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            // Ignore the phone's font-size setting so the layout matches the PWA in Chrome.
+            settings.textZoom = 100
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             webChromeClient = WebChromeClient()

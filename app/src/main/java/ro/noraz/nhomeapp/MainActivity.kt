@@ -70,6 +70,10 @@ class MainActivity : Activity() {
             // Honour the page's viewport meta like Chrome (the wall tablet layout is width=1600, scaled to fit).
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
+            // App, not a web page: no pinch / double-tap zoom.
+            settings.setSupportZoom(false)
+            settings.builtInZoomControls = false
+            settings.displayZoomControls = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             webChromeClient = object : WebChromeClient() {

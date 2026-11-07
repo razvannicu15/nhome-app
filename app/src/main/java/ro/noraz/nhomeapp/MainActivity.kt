@@ -103,7 +103,15 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView, url: String) {
                     syncSession()
                     applyDeviceProfile()
-                    if (!down && url != "about:blank") { status.visibility = View.GONE; status.text = "Nhome · caut serverul de acasă…" }
+                    if (!down && url != "about:blank") {
+                        // Second safety net: some error pages arrive without an HTTP error callback.
+                        view.evaluateJavascript("(function(){return document.querySelector('.app')?'ok':(document.title||'')+'|'+((document.body&&document.body.innerText)||'').slice(0,200)})()") { r ->
+                            val v = r ?: ""
+                            if (v.contains("ok")) { status.visibility = View.GONE; status.text = "Nhome · caut serverul de acasă…" }
+                            else if (Regex("(?i)(502|503|504|52\\d|bad gateway|host error|origin|unreachable|not available)").containsMatchIn(v)) serverDown()
+                            else status.visibility = View.GONE
+                        }
+                    }
                 }
             }
         }

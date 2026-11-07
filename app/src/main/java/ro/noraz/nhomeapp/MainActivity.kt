@@ -21,7 +21,9 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -90,10 +92,18 @@ class MainActivity : Activity() {
                     // Links outside Nhome (maps, help pages) open in the normal browser.
                     return try { startActivity(Intent(Intent.ACTION_VIEW, url)); true } catch (e: Exception) { false }
                 }
+                // Server down (Cloudflare 502/503/504 or no connection): no raw error page, show a
+                // calm message and look for the server again every few seconds.
+                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, resp: WebResourceResponse) {
+                    if (request.isForMainFrame && resp.statusCode in listOf(502, 503, 504, 520, 521, 522, 523, 524, 530)) serverDown()
+                }
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                    if (request.isForMainFrame) serverDown()
+                }
                 override fun onPageFinished(view: WebView, url: String) {
                     syncSession()
                     applyDeviceProfile()
-                    status.visibility = View.GONE
+                    if (!down && url != "about:blank") { status.visibility = View.GONE; status.text = "Nhome · caut serverul de acasă…" }
                 }
             }
         }
@@ -239,6 +249,20 @@ class MainActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && wall) setWall(true)
+    }
+
+
+    private var down = false
+    private val retry = Runnable { down = false; currentBase = null; choose(force = true) }
+
+    private fun serverDown() {
+        down = true
+        web.stopLoading()
+        web.loadUrl("about:blank")
+        status.text = "Serverul Nhome nu răspunde.\nVerifică dacă e pornit — reîncerc automat…"
+        status.visibility = View.VISIBLE
+        ui.removeCallbacks(retry)
+        ui.postDelayed(retry, 5000)
     }
 
     private fun prefs() = getSharedPreferences("nhome", Context.MODE_PRIVATE)

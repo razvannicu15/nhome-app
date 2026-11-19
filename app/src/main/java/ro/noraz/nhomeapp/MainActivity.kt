@@ -47,6 +47,9 @@ class MainActivity : Activity() {
         const val LAN_PORT = 8788
         const val PROBE_TIMEOUT_MS = 700
         const val SCAN_BUDGET_MS = 3500L
+        // A server that is still starting (after a restart from its plug) can accept the connection and not answer:
+        // WebView then waits for ever behind "caut serverul…". After this long without the app on screen, retry.
+        const val LOAD_WATCHDOG_MS = 20_000L
     }
 
     private lateinit var web: WebView
@@ -107,9 +110,9 @@ class MainActivity : Activity() {
                         // Second safety net: some error pages arrive without an HTTP error callback.
                         view.evaluateJavascript("(function(){return document.querySelector('.app')?'ok':(document.title||'')+'|'+((document.body&&document.body.innerText)||'').slice(0,200)})()") { r ->
                             val v = r ?: ""
-                            if (v.contains("ok")) { status.visibility = View.GONE; status.text = "Nhome · caut serverul de acasă…" }
+                            if (v.contains("ok")) { loaded(); status.visibility = View.GONE; status.text = "Nhome · caut serverul de acasă…" }
                             else if (Regex("(?i)(502|503|504|52\\d|bad gateway|host error|origin|unreachable|not available)").containsMatchIn(v)) serverDown()
-                            else status.visibility = View.GONE
+                            else { loaded(); status.visibility = View.GONE }
                         }
                     }
                 }
@@ -120,6 +123,8 @@ class MainActivity : Activity() {
             textSize = 15f
             gravity = Gravity.CENTER
             text = "Nhome · caut serverul de acasă…"
+            // stuck on this screen: a touch looks for the server again at once
+            setOnClickListener { ui.removeCallbacks(retry); retry.run() }
         }
         // Pairing is a persistent cookie; keep it and write it to disk promptly (see flush()).
         CookieManager.getInstance().setAcceptCookie(true)
@@ -160,8 +165,7 @@ class MainActivity : Activity() {
         if (checking) return
         checking = true
         thread(name = "nhome-lan") {
-            val lan = try { findLan() } catch (e: Exception) { null }
-            checking = false
+            val lan = try { findLan() } catch (e: Exception) { null } finally { checking = false }
             val target = lan ?: REMOTE
             ui.post {
                 if (force || target != currentBase) {
@@ -169,6 +173,7 @@ class MainActivity : Activity() {
                     if (lan != null) remember(lan)
                     syncSession()
                     web.loadUrl(target)
+                    watch()
                 }
             }
         }
@@ -262,8 +267,14 @@ class MainActivity : Activity() {
 
     private var down = false
     private val retry = Runnable { down = false; currentBase = null; choose(force = true) }
+    private val watchdog = Runnable { if (!down) serverDown() }
+
+    /** A page load started: if the app does not appear in time, treat the server as down (and keep retrying). */
+    private fun watch() { ui.removeCallbacks(watchdog); ui.postDelayed(watchdog, LOAD_WATCHDOG_MS) }
+    private fun loaded() { ui.removeCallbacks(watchdog) }
 
     private fun serverDown() {
+        ui.removeCallbacks(watchdog)
         down = true
         web.stopLoading()
         web.loadUrl("about:blank")
